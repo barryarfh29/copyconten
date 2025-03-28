@@ -15,7 +15,7 @@ from pyrogram.types import (
     Message,
 )
 
-from core import config
+from core import config, delta
 
 TASKS = {}
 BUTTON_ABORT = [[InlineKeyboardButton("Abort", callback_data="btn_abort")]]
@@ -139,9 +139,12 @@ async def async_evaluate_func(
         "raw": pyrogram.raw,
         "types": pyrogram.types,
         "client": client,
-        "message": message,
+        "delta": delta,
+        "bot": delta.bot_client,
+        "user": delta.user_client,
+        "msg": message,
+        "chat": message.chat,
         "replied": message.reply_to_message,
-        "user": (message.reply_to_message or message).from_user,
         "datetime": __import__("datetime"),
         "re": __import__("re"),
         "json": __import__("json"),

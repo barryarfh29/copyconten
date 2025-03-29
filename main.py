@@ -23,7 +23,7 @@ logger.addHandler(stream_handler)
 logger.propagate = False
 
 # Set Pyrogram's loggers to a higher level to silence info/debug messages
-logging.getLogger("pyrogram").setLevel(logging.WARNING)
+logging.getLogger("pyrogram").setLevel(logging.ERROR)
 
 
 async def main():

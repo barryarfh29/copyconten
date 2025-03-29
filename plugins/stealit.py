@@ -60,7 +60,9 @@ async def stealer(
             progress_args=(message, start_time, "download", file_name),
         )
     )
-    thumbnail = AsyncPath(await tools.download_thumbnail(user, target_msg))
+    thumbnail = await tools.download_thumbnail(user, target_msg)
+    if thumbnail:
+        thumbnail = AsyncPath(thumbnail)
 
     # Gunakan message.reply_to_message.id jika ada, jika tidak gunakan message.id
     reply_msg_id = (

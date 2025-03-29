@@ -104,6 +104,7 @@ async def stealer(
             caption=target_msg.caption,
             caption_entities=target_msg.caption_entities,
             file_name=target_msg.document.file_name,
+            disable_content_type_detection=True,
             reply_parameters=types.ReplyParameters(message_id=reply_msg_id),
             reply_markup=target_msg.reply_markup,
             progress=progress_func,

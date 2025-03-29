@@ -29,24 +29,11 @@ async def download_thumbnail(client: Client, msg: types.Message) -> str:
     return thumb
 
 
+from typing import Tuple
+from urllib.parse import parse_qs, urlparse
+
+
 def parse_telegram_url(url: str) -> Tuple[str, str, str]:
-    """
-    Parse a Telegram URL after removing any command prefix.
-
-    The URL string may include a command (e.g., "/parse") followed by the actual URL:
-        /parse https://t.me/deltaxsupports/149261?single
-
-    Returns:
-        A tuple containing:
-            - chat_id: the chat identifier (e.g., "deltaxsupports")
-            - msg_id: the message ID (e.g., "149261")
-            - msg_type: a string indicating the type;
-                        "single" if the query indicates so,
-                        otherwise "default" if no query is provided,
-                        or the raw query if different.
-    Raises:
-        ValueError: if the input string is empty or the URL format is invalid.
-    """
     if not url:
         raise ValueError("No URL provided")
 
@@ -65,7 +52,12 @@ def parse_telegram_url(url: str) -> Tuple[str, str, str]:
     if len(path_parts) < 2:
         raise ValueError("Invalid URL: missing chat id or message id")
 
-    chat_id, msg_id = path_parts[0], path_parts[1]
+    chat_id = path_parts[0]
+    # If there are more than two parts, assume this is a topic link and use the last segment as the message id.
+    if len(path_parts) == 2:
+        msg_id = path_parts[1]
+    else:
+        msg_id = path_parts[-1]
 
     qs = parse_qs(parsed.query)
     if "single" in qs:

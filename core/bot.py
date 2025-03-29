@@ -21,6 +21,7 @@ class Delta:
             api_hash=self.config.api_hash,
             bot_token=self.config.bot_token,
             plugins={"root": "plugins"},
+            sleep_threshold=180,
         )
         logger.info("Bot client initialized.")
 

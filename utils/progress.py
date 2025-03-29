@@ -1,3 +1,4 @@
+import asyncio
 import time
 from datetime import timedelta
 from typing import Literal, Union
@@ -57,7 +58,7 @@ async def progress_func(
         eta = timedelta(seconds=0)
 
     # Create a more visually appealing progress bar
-    bar_length = 10
+    bar_length = 8
     completed_units = int(round(percent * bar_length))
     progress_bar = "●" * completed_units + "○" * (bar_length - completed_units)
 

@@ -3,6 +3,12 @@ from typing import Union
 
 from aiopath import AsyncPath
 from pyrogram import Client, filters, types
+from pyrogram.errors import (
+    InviteHashExpired,
+    RPCError,
+    UserAlreadyParticipant,
+    UsernameNotOccupied,
+)
 
 from core import delta
 from utils import MessageType, get_message_type, progress_func, tools
@@ -56,6 +62,11 @@ async def stealer(
     )
     thumbnail = AsyncPath(await tools.download_thumbnail(user, target_msg))
 
+    # Gunakan message.reply_to_message.id jika ada, jika tidak gunakan message.id
+    reply_msg_id = (
+        message.reply_to_message.id if message.reply_to_message else message.id
+    )
+
     if message_type == MessageType.AUDIO:
         await bot.send_audio(
             chat_id=message.chat.id,
@@ -67,9 +78,7 @@ async def stealer(
             title=target_msg.audio.title,
             thumb=thumbnail,
             file_name=media_dl.name,
-            reply_parameters=types.ReplyParameters(
-                message_id=message.reply_to_message.id
-            ),
+            reply_parameters=types.ReplyParameters(message_id=reply_msg_id),
             reply_markup=target_msg.reply_markup,
             progress=progress_func,
             progress_args=(message, start_time, "upload", media_dl.name),
@@ -81,9 +90,7 @@ async def stealer(
             caption=target_msg.caption,
             caption_entities=target_msg.caption_entities,
             has_spoiler=target_msg.has_media_spoiler,
-            reply_parameters=types.ReplyParameters(
-                message_id=message.reply_to_message.id
-            ),
+            reply_parameters=types.ReplyParameters(message_id=reply_msg_id),
             reply_markup=target_msg.reply_markup,
             progress=progress_func,
             progress_args=(message, start_time, "upload", media_dl.name),
@@ -95,9 +102,7 @@ async def stealer(
             caption=target_msg.caption,
             caption_entities=target_msg.caption_entities,
             file_name=target_msg.document.file_name,
-            reply_parameters=types.ReplyParameters(
-                message_id=message.reply_to_message.id
-            ),
+            reply_parameters=types.ReplyParameters(message_id=reply_msg_id),
             reply_markup=target_msg.reply_markup,
             progress=progress_func,
             progress_args=(message, start_time, "upload", media_dl.name),
@@ -113,9 +118,7 @@ async def stealer(
             height=target_msg.video.height,
             supports_streaming=getattr(target_msg.video, "supports_streaming", False),
             file_name=getattr(target_msg.video, "file_name", None),
-            reply_parameters=types.ReplyParameters(
-                message_id=message.reply_to_message.id
-            ),
+            reply_parameters=types.ReplyParameters(message_id=reply_msg_id),
             reply_markup=target_msg.reply_markup,
             progress=progress_func,
             progress_args=(message, start_time, "upload", media_dl.name),
@@ -130,9 +133,7 @@ async def stealer(
             width=target_msg.animation.width,
             height=target_msg.animation.height,
             file_name=getattr(target_msg.animation, "file_name", None),
-            reply_parameters=types.ReplyParameters(
-                message_id=message.reply_to_message.id
-            ),
+            reply_parameters=types.ReplyParameters(message_id=reply_msg_id),
             reply_markup=target_msg.reply_markup,
             progress=progress_func,
             progress_args=(message, start_time, "upload", media_dl.name),
@@ -141,9 +142,7 @@ async def stealer(
         await bot.send_sticker(
             chat_id=message.chat.id,
             sticker=media_dl,
-            reply_parameters=types.ReplyParameters(
-                message_id=message.reply_to_message.id
-            ),
+            reply_parameters=types.ReplyParameters(message_id=reply_msg_id),
             reply_markup=target_msg.reply_markup,
             progress=progress_func,
             progress_args=(message, start_time, "upload", media_dl.name),
@@ -156,9 +155,7 @@ async def stealer(
             caption_entities=target_msg.caption_entities,
             duration=target_msg.voice.duration,
             file_name=getattr(target_msg.voice, "file_name", None),
-            reply_parameters=types.ReplyParameters(
-                message_id=message.reply_to_message.id
-            ),
+            reply_parameters=types.ReplyParameters(message_id=reply_msg_id),
             reply_markup=target_msg.reply_markup,
             progress=progress_func,
             progress_args=(message, start_time, "upload", media_dl.name),
@@ -173,12 +170,37 @@ async def stealer(
 
 @Client.on_message(filters.command("steal"))
 async def steal_cmd(client: delta.bot_client, message: types.Message) -> None:
+    text = message.text
+    if message.reply_to_message and message.reply_to_message.text:
+        text = message.reply_to_message.text
+
+    msg = await message.reply_text("Processing..")
+
+    if text.startswith("https://t.me/+") or text.startswith("https://t.me/joinchat/"):
+        try:
+            await client.join_chat(text)
+        except UserAlreadyParticipant:
+            pass
+        except InviteHashExpired:
+            await msg.edit(
+                "The invite link has expired. Please provide a valid invite link."
+            )
+            return
+        except UsernameNotOccupied:
+            await msg.edit("The username does not exist. Please check the username.")
+            return
+        except RPCError:
+            await msg.edit("Something went wrong!")
+            return
+        else:
+            await msg.edit("Joined successfully!")
+            return
+
     try:
         chat_id, msg_id, dl_mode = tools.parse_telegram_url(message.text)
     except ValueError:
-        await message.reply("Send me link")
+        await msg.edit("Send me link")
         return
 
-    msg = await message.reply_text("Processing..")
     await stealer(msg, chat_id, int(msg_id))
     await msg.delete()

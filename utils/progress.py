@@ -16,7 +16,7 @@ async def progress_func(
     start_time: float,
     mode: Literal["upload", "download"],
     file_name: str,
-    update_interval: float = 1,
+    update_interval: float = 5,
     last_update_time: list = [0],
 ) -> None:
     """

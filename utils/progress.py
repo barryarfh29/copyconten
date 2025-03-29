@@ -75,6 +75,6 @@ async def progress_func(
     try:
         await msg.edit(progress_message)
     except FloodWait as e:
-        asyncio.sleep(e.value)
+        await asyncio.sleep(e.value)
     except Exception as e:
         await msg.edit(str(e))

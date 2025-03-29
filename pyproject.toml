@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "aiohttp>=3.11.14",
+    "aiopath>=0.7.7",
     "aiorun>=2025.1.1",
     "meval>=2.5",
     "pyrotgfork>=2.2.9",

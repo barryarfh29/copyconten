@@ -15,3 +15,5 @@ wheels/
 
 # env file
 *.env
+# Downloads dir
+downloads/

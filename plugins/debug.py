@@ -16,6 +16,7 @@ from pyrogram.types import (
 )
 
 from core import config, delta
+from utils import format_sec
 
 TASKS = {}
 BUTTON_ABORT = [[InlineKeyboardButton("Abort", callback_data="btn_abort")]]
@@ -98,7 +99,7 @@ async def shell_handler(client: Client, message: Message) -> None:
     stdout, stderr = await sub_process_sh.communicate()
     bash_print_out = (stdout + stderr).decode().strip()
 
-    converted_time = fmt_secs(client.loop.time() - init_time)
+    converted_time = format_sec(client.loop.time() - init_time)
     final_output = f"<pre>{bash_print_out}</pre>\n<b>Elapsed:</b> {converted_time}"
 
     if len(final_output) > 4096:
@@ -169,7 +170,7 @@ async def async_evaluate_func(
             langcode = type(exception).__name__
             print_out = str(exception)
 
-    converted_time = fmt_secs(client.loop.time() - start_time)
+    converted_time = format_sec(client.loop.time() - start_time)
     final_output = f"<pre language={langcode}>{html.escape(print_out)}</pre>\n<pre language=Elapsed>{converted_time}</pre>"
 
     eval_buttons = BUTTON_RERUN.copy()
@@ -191,16 +192,6 @@ async def paste_rs(content: str) -> str:
         async with client.post("https://paste.rs", data=content) as resp:
             resp.raise_for_status()
             return (await resp.text()).strip()
-
-
-def fmt_secs(secs: float) -> str:
-    if secs == 0:
-        return "None"
-    elif secs < 1e-3:
-        return f"{secs * 1e6:.3f}".rstrip("0").rstrip(".") + " µs"
-    elif secs < 1:
-        return f"{secs * 1e3:.3f}".rstrip("0").rstrip(".") + " ms"
-    return f"{secs:.3f}".rstrip("0").rstrip(".") + "s"
 
 
 def cancel_task(task_id: str) -> None:

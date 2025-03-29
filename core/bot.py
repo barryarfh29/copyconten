@@ -30,7 +30,8 @@ class Delta:
                 api_id=self.config.api_id,
                 api_hash=self.config.api_hash,
                 session_string=self.config.session_string,
-                in_memory=True,
+                takeout=True,
+                sleep_threshold=180,
             )
             logger.info("User client initialized.")
 

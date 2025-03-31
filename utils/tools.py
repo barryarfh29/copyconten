@@ -90,5 +90,7 @@ def parse_telegram_url(url: str) -> Tuple[str, str, str, Optional[str], str]:
             msg_type = "default"
 
     if chat_type == "private":
-        chat_id = "-100" + chat_id
+        _chat_id = "-100" + chat_id
+        chat_id = int(_chat_id)
+
     return chat_type, chat_id, msg_id, msg_type, msg_id_second

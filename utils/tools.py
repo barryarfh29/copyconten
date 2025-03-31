@@ -1,5 +1,5 @@
 import logging
-from typing import Tuple
+from typing import Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
 from pyrogram import Client, types
@@ -29,42 +29,63 @@ async def download_thumbnail(client: Client, msg: types.Message) -> str:
     return thumb
 
 
-from typing import Tuple
+from typing import Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
 
-def parse_telegram_url(url: str) -> Tuple[str, str, str]:
+def parse_telegram_url(url: str) -> Tuple[str, str, str, Optional[str], str]:
     if not url:
         raise ValueError("No URL provided")
-
     text = url.strip()
-
-    # Remove a command prefix if present.
     if text.startswith("/"):
         parts = text.split(" ", 1)
         if len(parts) == 2:
             text = parts[1].strip()
         else:
             raise ValueError("No URL provided after command")
-
-    parsed = urlparse(text)
-    path_parts = parsed.path.strip("/").split("/")
-    if len(path_parts) < 2:
-        raise ValueError("Invalid URL: missing chat id or message id")
-
-    chat_id = path_parts[0]
-    # If there are more than two parts, assume this is a topic link and use the last segment as the message id.
-    if len(path_parts) == 2:
-        msg_id = path_parts[1]
+    msg_id_second = None
+    if " - " in text:
+        first_url, second_url = text.split(" - ", 1)
+        parsed1 = urlparse(first_url.strip())
+        path_parts1 = parsed1.path.strip("/").split("/")
+        if len(path_parts1) < 2:
+            raise ValueError("Invalid first URL: missing chat id or message id")
+        if path_parts1[0] == "c":
+            chat_type = "private"
+            chat_id = path_parts1[1]
+        else:
+            chat_type = "public"
+            chat_id = path_parts1[0]
+        msg_id = path_parts1[-1] if len(path_parts1) >= 3 else path_parts1[1]
+        query_params = parse_qs(parsed1.query)
+        if "single" in query_params:
+            msg_type = "single"
+        elif parsed1.query:
+            msg_type = parsed1.query
+        else:
+            msg_type = "default"
+        parsed2 = urlparse(second_url.strip())
+        path_parts2 = parsed2.path.strip("/").split("/")
+        if len(path_parts2) < 2:
+            raise ValueError("Invalid second URL: missing chat id or message id")
+        msg_id_second = path_parts2[-1] if len(path_parts2) >= 3 else path_parts2[1]
     else:
-        msg_id = path_parts[-1]
-
-    qs = parse_qs(parsed.query)
-    if "single" in qs:
-        msg_type = "single"
-    elif parsed.query:
-        msg_type = parsed.query
-    else:
-        msg_type = "default"
-
-    return chat_id, msg_id, msg_type
+        parsed = urlparse(text)
+        path_parts = parsed.path.strip("/").split("/")
+        if len(path_parts) < 2:
+            raise ValueError("Invalid URL: missing chat id or message id")
+        if path_parts[0] == "c":
+            chat_type = "private"
+            chat_id = path_parts[1]
+        else:
+            chat_type = "public"
+            chat_id = path_parts[0]
+        msg_id = path_parts[-1] if len(path_parts) >= 3 else path_parts[1]
+        query_params = parse_qs(parsed.query)
+        if "single" in query_params:
+            msg_type = "single"
+        elif parsed.query:
+            msg_type = parsed.query
+        else:
+            msg_type = "default"
+    return chat_type, chat_id, msg_id, msg_type, msg_id_second

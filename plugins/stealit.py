@@ -288,8 +288,9 @@ async def steal_cmd(client: Client, message: types.Message) -> None:
                     m_id,
                     reply_parameters=types.ReplyParameters(message_id=message.id),
                 )
-    except Exception as e:
-        await msg.edit(f"Failed to process messages: {str(e)}")
+    except Exception:
+        await stealer(msg, chat_id, m_id)
+        #  await msg.edit(f"Failed to process messages: {str(e)}")
         return
 
     await msg.delete()

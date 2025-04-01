@@ -58,18 +58,18 @@ async def progress_func(
         eta = timedelta(seconds=0)
 
     # Create a more visually appealing progress bar
-    bar_length = 8
+    bar_length = 20
     completed_units = int(round(percent * bar_length))
     progress_bar = "●" * completed_units + "○" * (bar_length - completed_units)
 
     # Format the status message
     status = "Uploading" if mode == "upload" else "Downloading"
     progress_message = (
-        f"`{file_name}`\n"
-        f"Status: **{status}**\n"
-        f"Progress: [{progress_bar}] {round(percent * 100)}%\n"
-        f"{human_readable_bytes(current)} of {human_readable_bytes(total)} @ {human_readable_bytes(speed, suffix='/s')}\n"
-        f"ETA: {format_duration(eta)}\n\n"
+        f"<pre language=Name>{file_name}</pre>\n"
+        f"<pre language=Status>{status}</pre>\n"
+        f"<pre language=Progress>[{progress_bar}] {round(percent * 100)}%</pre>\n"
+        f"<pre language=Processed>{human_readable_bytes(current)} of {human_readable_bytes(total)} @ {human_readable_bytes(speed, suffix='/s')}</pre>\n"
+        f"<pre language=ETA>{format_duration(eta)}</pre>\n"
     )
 
     try:

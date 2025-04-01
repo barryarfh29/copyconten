@@ -150,8 +150,8 @@ class VideoDownloader:
                 self.progress.update(0, "Failed to extract video information")
                 return False, None
 
-            title = self._extract_title(page_html) or "video"
-            file_name = self._get_url_based_filename(title)
+            self._extract_title(page_html) or "video"
+            file_name = self._get_url_based_filename()
             self.progress.set_file_name(file_name)
 
             self.progress.update(0, "Processing playlist")

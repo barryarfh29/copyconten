@@ -182,7 +182,7 @@ class VideoDownloader:
             return False, None
 
     async def _fetch_page_content(self) -> Optional[str]:
-        self.logger.info(f"Fetching video page: {self.url}")
+        self.logger.debug(f"Fetching video page: {self.url}")
         content = await self._http_get(self.url)
         return content.decode("utf-8", errors="replace") if content else None
 

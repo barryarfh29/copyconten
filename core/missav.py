@@ -262,7 +262,7 @@ class VideoDownloader:
 
     async def _process_m3u8_playlist(self, uuid: str) -> Optional[Tuple[str, int]]:
         m3u8_url = f"https://surrit.com/{uuid}/playlist.m3u8"
-        self.logger.info(f"Fetching m3u8 playlist: {m3u8_url}")
+        self.logger.debug(f"Fetching m3u8 playlist: {m3u8_url}")
 
         content = await self._http_get(m3u8_url)
         if not content:
@@ -317,7 +317,7 @@ class VideoDownloader:
             "-c",
             "copy",
             "-loglevel",
-            "info",
+            "error",
             output_file,
         ]
 

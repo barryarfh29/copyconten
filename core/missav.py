@@ -3,14 +3,13 @@ import logging
 import os
 import re
 import time
-from datetime import timedelta
 from typing import Any, Callable, Dict, Optional, Tuple
 
 import m3u8
 from curl_cffi import requests
 from ua_generator import generate as generate_user_agent
 
-from utils import format_duration, progress_func
+from utils import progress_func
 
 logger = logging.getLogger("Delta")
 
@@ -18,14 +17,14 @@ logger = logging.getLogger("Delta")
 class ProgressTracker:
     def __init__(
         self,
-        total_segments: int = 0,
+        total_bytes: int = 0,
         callback: Optional[Callable[[Dict[str, Any]], None]] = None,
         msg=None,
         file_name: str = "video",
         update_interval: float = 5.0,
     ):
-        self.total_segments = total_segments
-        self.completed_segments = 0
+        self.total_bytes = total_bytes
+        self.completed_bytes = 0
         self.start_time = time.time()
         self.callback = callback
         self.status = "initializing"
@@ -33,11 +32,10 @@ class ProgressTracker:
         self.update_interval = update_interval
         self.msg = msg
         self.file_name = file_name
-        self.estimated_bytes_per_segment = 1048576  # Default estimate
         self.last_update_time_list = [0]
 
-    def update(self, segments_completed: int = 1, status: Optional[str] = None):
-        self.completed_segments += segments_completed
+    def update_bytes(self, bytes_completed: int, status: Optional[str] = None):
+        self.completed_bytes += bytes_completed
         if status:
             self.status = status
         current_time = time.time()
@@ -45,13 +43,9 @@ class ProgressTracker:
             self.last_update_time = current_time
             self._report_progress()
 
-    def set_total_segments(self, total_segments: int):
-        self.total_segments = total_segments
+    def set_total_bytes(self, total_bytes: int):
+        self.total_bytes = total_bytes
         self._report_progress()
-
-    def set_bytes_per_segment(self, bytes_per_segment: int):
-        self.estimated_bytes_per_segment = bytes_per_segment
-        logger.debug(f"Updated bytes per segment: {bytes_per_segment}")
 
     def set_file_name(self, file_name: str):
         self.file_name = file_name
@@ -59,22 +53,22 @@ class ProgressTracker:
 
     def _report_progress(self):
         elapsed_time = time.time() - self.start_time
-        if self.total_segments == 0:
+        if self.total_bytes == 0:
             percentage = 0
         else:
-            percentage = (self.completed_segments / self.total_segments) * 100
+            percentage = (self.completed_bytes / self.total_bytes) * 100
 
         if percentage > 0:
             eta = (elapsed_time / percentage) * (100 - percentage)
         else:
             eta = 0
 
-        speed = self.completed_segments / elapsed_time if elapsed_time > 0 else 0
+        speed = self.completed_bytes / elapsed_time if elapsed_time > 0 else 0
 
         progress_data = {
             "status": self.status,
-            "completed": self.completed_segments,
-            "total": self.total_segments,
+            "completed_bytes": self.completed_bytes,
+            "total_bytes": self.total_bytes,
             "percentage": round(percentage, 2),
             "elapsed": round(elapsed_time, 2),
             "eta": round(eta, 2),
@@ -85,13 +79,11 @@ class ProgressTracker:
             self.callback(progress_data)
 
         if self.msg:
-            current_bytes = self.completed_segments * self.estimated_bytes_per_segment
-            total_bytes = self.total_segments * self.estimated_bytes_per_segment
             mode = "upload" if "upload" in self.status.lower() else "download"
             asyncio.create_task(
                 progress_func(
-                    current=current_bytes,
-                    total=total_bytes,
+                    current=self.completed_bytes,
+                    total=self.total_bytes,
                     msg=self.msg,
                     start_time=self.start_time,
                     mode=mode,
@@ -139,47 +131,47 @@ class VideoDownloader:
 
     async def download(self) -> Tuple[bool, Optional[str]]:
         try:
-            self.progress.update(0, "Fetching video page")
+            self.progress.update_bytes(0, "Fetching video page")
             page_html = await self._fetch_page_content()
             if not page_html:
-                self.progress.update(0, "Failed to fetch page content")
+                self.progress.update_bytes(0, "Failed to fetch page content")
                 return False, None
 
-            self.progress.update(0, "Extracting video information")
+            self.progress.update_bytes(0, "Extracting video information")
             uuid = self._extract_uuid(page_html)
             if not uuid:
-                self.progress.update(0, "Failed to extract video information")
+                self.progress.update_bytes(0, "Failed to extract video information")
                 return False, None
 
             self._extract_title(page_html) or "video"
             file_name = self._get_url_based_filename()
             self.progress.set_file_name(file_name)
 
-            self.progress.update(0, "Processing playlist")
+            self.progress.update_bytes(0, "Processing playlist")
             variant_data = await self._process_m3u8_playlist(uuid)
             if not variant_data:
-                self.progress.update(0, "Failed to process playlist")
+                self.progress.update_bytes(0, "Failed to process playlist")
                 return False, None
 
-            variant_url, segment_count = variant_data
-            self.progress.set_total_segments(segment_count)
+            variant_url, total_bytes = variant_data
+            self.progress.set_total_bytes(total_bytes)
 
             video_url = f"https://surrit.com/{uuid}/{variant_url}"
             output_file = os.path.join(self.output_dir, f"{file_name}.mp4")
 
-            self.progress.update(0, "Starting download")
+            self.progress.update_bytes(0, "Starting download")
             success = await self._execute_ffmpeg_download(video_url, output_file)
 
             if success:
-                self.progress.update(0, "Download completed")
+                self.progress.update_bytes(0, "Download completed")
             else:
-                self.progress.update(0, "Download failed")
+                self.progress.update_bytes(0, "Download failed")
 
             return (success, output_file) if success else (False, None)
 
         except Exception as e:
             self.logger.error(f"Download process failed: {e}")
-            self.progress.update(0, f"Error: {str(e)}")
+            self.progress.update_bytes(0, f"Error: {str(e)}")
             return False, None
 
     async def _fetch_page_content(self) -> Optional[str]:
@@ -301,31 +293,47 @@ class VideoDownloader:
         if not segment_content:
             return None
 
-        segment_count = self._count_segments(segment_content.decode("utf-8"))
-        if segment_count == 0:
-            return None
-
-        # Estimate segment size using the first segment
         try:
             playlist = m3u8.loads(segment_content.decode("utf-8"))
-            if playlist.segments:
-                first_segment_uri = playlist.segments[0].uri
-                variant_dir = os.path.dirname(variant_url)
-                first_segment_url = (
-                    f"https://surrit.com/{uuid}/{variant_dir}/{first_segment_uri}"
-                )
-                segment_size = await self._get_segment_size(first_segment_url)
-                if segment_size:
-                    self.progress.set_bytes_per_segment(segment_size)
-                    self.logger.debug(f"Estimated bytes per segment: {segment_size}")
-                else:
-                    self.logger.warning(
-                        "Failed to get segment size, using default estimate"
-                    )
-        except Exception as e:
-            self.logger.error(f"Error estimating segment size: {e}")
+            total_bytes = 0
 
-        return variant_url, segment_count
+            # First try to use byte ranges if available
+            if all(seg.byterange for seg in playlist.segments):
+                total_bytes = sum(seg.byterange.length for seg in playlist.segments)
+                self.logger.info(f"Using byte range total: {total_bytes} bytes")
+            else:
+                # Fallback to sampling first 3 segments
+                sample_segments = playlist.segments[:3]
+                if not sample_segments:
+                    return None
+
+                total_size = 0
+                successful_samples = 0
+                variant_dir = os.path.dirname(variant_url)
+
+                for seg in sample_segments:
+                    segment_url = f"https://surrit.com/{uuid}/{variant_dir}/{seg.uri}"
+                    size = await self._get_segment_size(segment_url)
+                    if size:
+                        total_size += size
+                        successful_samples += 1
+
+                if successful_samples > 0:
+                    avg_size = total_size / successful_samples
+                    total_bytes = int(avg_size * len(playlist.segments))
+                    self.logger.info(
+                        f"Estimated total size from {successful_samples} samples: {total_bytes} bytes"
+                    )
+                else:
+                    # Final fallback: 1MB per segment
+                    total_bytes = len(playlist.segments) * 1048576
+                    self.logger.warning("Using fallback size estimation (1MB/segment)")
+
+            return variant_url, total_bytes
+
+        except Exception as e:
+            self.logger.error(f"Error processing playlist: {e}")
+            return None
 
     def _select_quality_variant(self, m3u8_content: str) -> Optional[str]:
         try:
@@ -344,14 +352,6 @@ class VideoDownloader:
         except Exception as e:
             self.logger.error(f"Failed to process m3u8 content: {e}")
             return None
-
-    def _count_segments(self, m3u8_content: str) -> int:
-        try:
-            playlist = m3u8.loads(m3u8_content)
-            return len(playlist.segments)
-        except Exception as e:
-            self.logger.error(f"Failed to count segments: {e}")
-            return 100
 
     async def _execute_ffmpeg_download(self, video_url: str, output_file: str) -> bool:
         ffmpeg_cmd = [
@@ -376,14 +376,30 @@ class VideoDownloader:
             )
 
             async def read_stderr():
-                segment_pattern = re.compile(r"Opening \'.*\' for reading")
+                size_pattern = re.compile(r"size=\s*(\d+)(k|m)?B", re.IGNORECASE)
+                byte_pattern = re.compile(r"bytes=\s*(\d+)", re.IGNORECASE)
                 while True:
                     line = await process.stderr.readline()
                     if not line:
                         break
                     line_str = line.decode("utf-8", errors="replace")
-                    if segment_pattern.search(line_str):
-                        self.progress.update(1, "Downloading")
+
+                    # Parse size in format like "size=   1234kB" or "size=  1.23MB"
+                    size_match = size_pattern.search(line_str)
+                    if size_match:
+                        value, unit = size_match.groups()
+                        multiplier = 1
+                        if unit:
+                            multiplier = 1024 if unit.lower() == "k" else 1048576
+                        bytes_value = int(float(value) * multiplier)
+                        self.progress.update_bytes(bytes_value, "Downloading")
+                        continue
+
+                    # Parse raw byte count format
+                    byte_match = byte_pattern.search(line_str)
+                    if byte_match:
+                        bytes_value = int(byte_match.group(1))
+                        self.progress.update_bytes(bytes_value, "Downloading")
 
             monitor_task = asyncio.create_task(read_stderr())
             await process.wait()
@@ -404,33 +420,12 @@ class VideoDownloader:
             return False
 
 
-def print_progress(progress_data: Dict[str, Any]):
-    status = progress_data["status"]
-    percentage = progress_data["percentage"]
-    eta = progress_data["eta"]
-
-    bar_length = 30
-    filled_length = int(bar_length * progress_data["percentage"] / 100)
-    bar = "█" * filled_length + "░" * (bar_length - filled_length)
-
-    eta_str = format_duration(timedelta(seconds=eta))
-
-    print(
-        f"\r{status}: [{bar}] {percentage:.1f}% | ETA: {eta_str} | Segments: {progress_data['completed']}/{progress_data['total']}",
-        end="",
-        flush=True,
-    )
-
-    if status == "Download completed":
-        print()
-
-
 async def missav_dl(url: str, msg, quality: str = "lowest"):
     downloader = VideoDownloader(
         url=url,
         output_dir="./downloads",
         quality=quality,
         msg=msg,
-        update_interval=3.0,
+        update_interval=1.0,
     )
     return await downloader.download()

@@ -7,6 +7,9 @@ from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMa
 from core import missav_dl
 from utils import progress_func, tools
 
+# Dictionary untuk menyimpan link berdasarkan message_id
+cache = {}
+
 
 # Fungsi untuk menangani perintah /missav
 @Client.on_message(filters.command("missav"))
@@ -25,12 +28,12 @@ async def missav_cmd(client: Client, message):
         ]
     )
 
-    # Menyimpan link di dalam pesan sementara untuk digunakan nanti
+    # Menyimpan link di dalam cache dengan menggunakan message_id sebagai key
+    cache[message.message_id] = link
+
     await message.reply(
         "Pilih kualitas video yang diinginkan:", reply_markup=keyboard, quote=True
     )
-    # Menyimpan link dalam database, cache, atau dalam message untuk digunakan nanti
-    client.cache[message.message_id] = link
 
 
 # Fungsi untuk menangani pemilihan kualitas menggunakan filters.regex
@@ -39,8 +42,8 @@ async def quality_callback(client: Client, callback_query: CallbackQuery):
     # Mendapatkan kualitas dari callback_data
     quality = callback_query.data.split("_")[1]
 
-    # Mengambil link dari pesan yang relevan
-    link = client.cache.get(callback_query.message.reply_to_message.message_id)
+    # Mengambil link dari cache berdasarkan message_id
+    link = cache.get(callback_query.message.reply_to_message.message_id)
     if not link:
         return await callback_query.answer("Tautan tidak ditemukan!", show_alert=True)
 

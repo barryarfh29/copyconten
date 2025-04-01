@@ -26,6 +26,7 @@ async def missav_cmd(client: Client, message):
         await message.reply_video(
             path,
             caption=caption,
+            thumb=thumbnail,
             progress=progress_func,
             progress_args=(process, start_time, "upload", path.name),
         )

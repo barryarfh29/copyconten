@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Optional, Tuple
 from urllib.parse import parse_qs, urlparse
@@ -9,11 +10,65 @@ from . import MessageType, get_message_type
 logger = logging.getLogger("Delta")
 
 
+async def get_video_duration(input_video: str) -> float:
+
+    cmd = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        input_video,
+    ]
+    process = await asyncio.create_subprocess_exec(
+        *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+    )
+    stdout, stderr = await process.communicate()
+    if process.returncode != 0:
+        error_message = stderr.decode().strip()
+        raise Exception(f"ffprobe error: {error_message}")
+    try:
+        duration = float(stdout.decode().strip())
+        return duration
+    except ValueError:
+        raise Exception("Tidak dapat memparsing durasi video.")
+
+
+async def generate_thumbnail(
+    input_video: str,
+    output_image: str = "downloads/thumbs.jpg",
+    time_position: str = None,
+) -> str:
+    if time_position is None:
+        full_duration = await get_video_duration(input_video)
+        time_offset = full_duration * 0.1
+        time_position = str(time_offset)
+    ffmpeg_cmd = [
+        "ffmpeg",
+        "-ss",
+        time_position,
+        "-i",
+        input_video,
+        "-vframes",
+        "1",
+        "-q:v",
+        "8",
+        output_image,
+        "-y",
+    ]
+    process = await asyncio.create_subprocess_exec(
+        *ffmpeg_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+    )
+    stdout, stderr = await process.communicate()
+    if process.returncode != 0:
+        error_message = stderr.decode().strip()
+        raise Exception(f"ffmpeg error: {error_message}")
+    return output_image
+
+
 async def download_thumbnail(client: Client, msg: types.Message) -> str:
-    """
-    Auto-detect the message type and download the corresponding thumbnail if available.
-    Returns the file path of the downloaded thumbnail or None if not available.
-    """
     thumb = None
     try:
         msg_type = get_message_type(msg)

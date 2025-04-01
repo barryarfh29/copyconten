@@ -64,16 +64,24 @@ async def stealer(
         None,
     )
     file_name = getattr(media_obj, "file_name", None)
-    media_dl = AsyncPath(
-        await user.download_media(
-            target_msg,
-            progress=progress_func,
-            progress_args=(message, start_time, "download", file_name),
+    try:
+        media_dl = AsyncPath(
+            await user.download_media(
+                target_msg,
+                progress=progress_func,
+                progress_args=(message, start_time, "download", file_name),
+            )
         )
-    )
+    except ValueError:
+
+        return
 
     # Download thumbnail if available
-    thumbnail = await tools.download_thumbnail(user, target_msg)
+    thumbnail = (
+        await tools.generate_thumbnail(media_dl)
+        if message_type == MessageType.VIDEO
+        else await tools.download_thumbnail(user, target_msg)
+    )
     if thumbnail:
         thumbnail = AsyncPath(thumbnail)
 
@@ -119,6 +127,7 @@ async def stealer(
                 caption=target_msg.caption,
                 caption_entities=target_msg.caption_entities,
                 file_name=target_msg.document.file_name,
+                thumb=thumbnail,
                 disable_content_type_detection=True,
                 reply_parameters=types.ReplyParameters(message_id=reply_msg_id),
                 reply_markup=target_msg.reply_markup,
@@ -137,6 +146,7 @@ async def stealer(
                 supports_streaming=getattr(
                     target_msg.video, "supports_streaming", False
                 ),
+                thumb=thumbnail,
                 file_name=getattr(target_msg.video, "file_name", None),
                 reply_parameters=types.ReplyParameters(message_id=reply_msg_id),
                 reply_markup=target_msg.reply_markup,
@@ -282,15 +292,17 @@ async def steal_cmd(client: Client, message: types.Message) -> None:
                     await msg.edit(f"Using alternative method...\n{str(e)}")
                     await stealer(msg, chat_id, m_id)
             else:
-                await delta.bot_client.copy_message(
-                    msg.chat.id,
-                    chat_id,
-                    m_id,
-                    reply_parameters=types.ReplyParameters(message_id=message.id),
-                )
+                try:
+                    await delta.bot_client.copy_message(
+                        msg.chat.id,
+                        chat_id,
+                        m_id,
+                        reply_parameters=types.ReplyParameters(message_id=message.id),
+                    )
+                except Exception:
+                    await stealer(msg, chat_id, m_id)
     except Exception:
-        await stealer(msg, chat_id, m_id)
-        #  await msg.edit(f"Failed to process messages: {str(e)}")
+        await msg.edit(f"Failed to process messages: {str(e)}")
         return
 
     await msg.delete()

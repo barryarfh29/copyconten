@@ -29,7 +29,7 @@ async def missav_cmd(client: Client, message):
     )
 
     # Menyimpan link di dalam cache dengan menggunakan message_id sebagai key
-    cache[message.message_id] = link
+    cache[message.id] = link
 
     await message.reply(
         "Pilih kualitas video yang diinginkan:", reply_markup=keyboard, quote=True

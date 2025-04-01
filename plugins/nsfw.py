@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import os
 import time
 from pathlib import Path
@@ -14,6 +13,7 @@ from pyrogram.types import (
 
 from core import missav_dl
 from utils import (
+    format_duration,
     get_video_info,
     progress_func,
     split_video_by_size,
@@ -73,8 +73,9 @@ async def quality_callback(client: Client, callback_query: CallbackQuery):
 
         if file_size > MAX_SIZE:
             await process.edit("<pre language=Status>Splitting video...</pre>")
-            # If file exceeds MAX_SIZE, split it into parts
-            output_prefix = str(path.parent / "split_")
+            # For split files, include the original file name in the output prefix.
+            # For example, if original is "original.mp4", output files will be "original_splited_001.mp4", etc.
+            output_prefix = str(path.parent / f"{path.stem}_splited_")
             split_files = await split_video_by_size(str(path), output_prefix, MAX_SIZE)
 
             media_group = (
@@ -86,30 +87,35 @@ async def quality_callback(client: Client, callback_query: CallbackQuery):
             for i, file in enumerate(split_files):
                 file_info = await get_video_info(file)
                 seg_duration = float(file_info["format"]["duration"])
-                thumb_path = await tools.generate_thumbnail(file)
+                thumb_path = await tools.generate_thumbnail(
+                    file, output_image=f"{path.name}-{process.date} + jpg"
+                )
+                formatted_duration = format_duration(seg_duration)
                 caption = (
+                    f"{path.name}\n"  # Include original file name in the caption
                     f"Part {i+1}\n"
-                    f"Duration: {seg_duration:.2f} seconds\n"
+                    f"Duration: {formatted_duration}\n"
                     f"Diminta oleh: {callback_query.from_user.mention}"
                 )
                 msg = await callback_query.message.reply_video(
                     file,
                     caption=caption,
                     thumb=thumb_path,
+                    duration=int(seg_duration),
                     progress=progress_func,
                     progress_args=(process, time.time(), "upload", Path(file).name),
                 )
                 uploaded_msgs.append(msg)
                 # Use the file_id from the uploaded message's video field
-                file_id = msg.video.file_id
-                media_group.append(
-                    InputMediaVideo(file_id, caption=caption, thumb=thumb_path)
-                )
+                media_group.append(InputMediaVideo(msg.video.file_id, caption=caption))
 
-            # Now that all parts have been individually uploaded,
-            # send them as a consolidated media group.
+            # Now, send a consolidated media group with the uploaded parts
             await process.edit("<pre language=Status>Mengirim media group...</pre>")
-            await client.send_media_group(callback_query.message.chat.id, media_group)
+
+            # Send media group in chunks of 10 (Telegram limit)
+            for i in range(0, len(media_group), 10):
+                chunk = media_group[i : i + 10]
+                await client.send_media_group(callback_query.message.chat.id, chunk)
 
             # Delete the individual upload messages to clean up the chat
             for msg in uploaded_msgs:
@@ -122,15 +128,18 @@ async def quality_callback(client: Client, callback_query: CallbackQuery):
             for file in split_files:
                 if os.path.exists(file):
                     os.remove(file)
-            # Optionally, clean up thumbnails if stored separately.
+            # Clean up original file
+            await path.unlink(missing_ok=True)
+
         else:
             # For files within MAX_SIZE, get the video's duration and generate a thumbnail
             video_info = await get_video_info(str(path))
             duration = float(video_info["format"]["duration"])
             thumbnail_path = await tools.generate_thumbnail(str(path))
+            formatted_duration = format_duration(duration)
             caption = (
                 f"`{path.name}`\n"
-                f"Duration: {duration:.2f} seconds\n"
+                f"Duration: {formatted_duration}\n"
                 f"Diminta oleh: {callback_query.from_user.mention}"
             )
 
@@ -138,12 +147,13 @@ async def quality_callback(client: Client, callback_query: CallbackQuery):
                 str(path),
                 caption=caption,
                 thumb=thumbnail_path,
+                duration=int(duration),
                 progress=progress_func,
                 progress_args=(process, start_time, "upload", path.name),
             )
 
             # Cleanup the original file and thumbnail
-            await path.unlink()
+            await path.unlink(missing_ok=True)
             if os.path.exists(thumbnail_path):
                 os.remove(thumbnail_path)
 

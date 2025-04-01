@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import time
+from pathlib import Path
 
 from aiopath import AsyncPath
 from pyrogram import Client, filters
@@ -71,35 +72,62 @@ async def quality_callback(client: Client, callback_query: CallbackQuery):
         file_size = os.path.getsize(str(path))
 
         if file_size > MAX_SIZE:
-            await process.edit("<pre language=Status>Spliting</pre>")
+            await process.edit("<pre language=Status>Splitting video...</pre>")
             # If file exceeds MAX_SIZE, split it into parts
             output_prefix = str(path.parent / "split_")
             split_files = await split_video_by_size(str(path), output_prefix, MAX_SIZE)
 
-            # Build a media group; for each split part, retrieve duration and add it to the caption.
-            media_group = []
+            media_group = (
+                []
+            )  # Will contain InputMediaVideo objects for final media group
+            uploaded_msgs = []  # To store individual upload messages
+
+            # Upload each split part one by one with progress callback
             for i, file in enumerate(split_files):
                 file_info = await get_video_info(file)
                 seg_duration = float(file_info["format"]["duration"])
-                media_group.append(
-                    InputMediaVideo(
-                        file,
-                        caption=f"Part {i+1}\nDuration: {seg_duration:.2f} seconds",
-                    )
+                thumb_path = await tools.generate_thumbnail(file)
+                caption = (
+                    f"Part {i+1}\n"
+                    f"Duration: {seg_duration:.2f} seconds\n"
+                    f"Diminta oleh: {callback_query.from_user.mention}"
                 )
+                msg = await callback_query.message.reply_video(
+                    file,
+                    caption=caption,
+                    thumb=thumb_path,
+                    progress=progress_func,
+                    progress_args=(process, time.time(), "upload", Path(file).name),
+                )
+                uploaded_msgs.append(msg)
+                # Use the file_id from the uploaded message's video field
+                file_id = msg.video.file_id
+                media_group.append(
+                    InputMediaVideo(file_id, caption=caption, thumb=thumb_path)
+                )
+
+            # Now that all parts have been individually uploaded,
+            # send them as a consolidated media group.
+            await process.edit("<pre language=Status>Mengirim media group...</pre>")
             await client.send_media_group(callback_query.message.chat.id, media_group)
 
-            # Clean up the temporary split files
+            # Delete the individual upload messages to clean up the chat
+            for msg in uploaded_msgs:
+                try:
+                    await msg.delete()
+                except Exception:
+                    pass
+
+            # Clean up the temporary split files and generated thumbnails
             for file in split_files:
                 if os.path.exists(file):
                     os.remove(file)
+            # Optionally, clean up thumbnails if stored separately.
         else:
             # For files within MAX_SIZE, get the video's duration and generate a thumbnail
             video_info = await get_video_info(str(path))
             duration = float(video_info["format"]["duration"])
             thumbnail_path = await tools.generate_thumbnail(str(path))
-            thumbnail = AsyncPath(thumbnail_path)
-
             caption = (
                 f"`{path.name}`\n"
                 f"Duration: {duration:.2f} seconds\n"
@@ -109,13 +137,14 @@ async def quality_callback(client: Client, callback_query: CallbackQuery):
             await callback_query.message.reply_video(
                 str(path),
                 caption=caption,
-                thumb=str(thumbnail),
+                thumb=thumbnail_path,
                 progress=progress_func,
                 progress_args=(process, start_time, "upload", path.name),
             )
 
             # Cleanup the original file and thumbnail
             await path.unlink()
-            await thumbnail.unlink()
+            if os.path.exists(thumbnail_path):
+                os.remove(thumbnail_path)
 
     await process.delete()

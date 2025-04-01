@@ -48,7 +48,7 @@ async def quality_callback(client: Client, callback_query: CallbackQuery):
         return await callback_query.answer("Tautan tidak ditemukan!", show_alert=True)
 
     # Proses pengunduhan video berdasarkan kualitas yang dipilih
-    process = await callback_query.message.reply("Memproses unduhan...")
+    process = await callback_query.message.edit("Memproses unduhan...")
     success, path = await missav_dl(link, quality=quality, msg=process)
     if success:
         start_time = time.time()

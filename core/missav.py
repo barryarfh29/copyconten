@@ -33,7 +33,7 @@ class ProgressTracker:
         self.update_interval = update_interval
         self.msg = msg
         self.file_name = file_name
-        self.estimated_bytes_per_segment = 1048576
+        self.estimated_bytes_per_segment = 1048576  # Default estimate
         self.last_update_time_list = [0]
 
     def update(self, segments_completed: int = 1, status: Optional[str] = None):
@@ -51,6 +51,7 @@ class ProgressTracker:
 
     def set_bytes_per_segment(self, bytes_per_segment: int):
         self.estimated_bytes_per_segment = bytes_per_segment
+        logger.debug(f"Updated bytes per segment: {bytes_per_segment}")
 
     def set_file_name(self, file_name: str):
         self.file_name = file_name
@@ -195,6 +196,7 @@ class VideoDownloader:
                     headers=self.headers,
                     timeout=self.timeout,
                     verify=False,
+                    impersonate="chrome",
                 )
                 if response.status_code >= 400:
                     self.logger.error(
@@ -205,6 +207,28 @@ class VideoDownloader:
                 return response.content
             except Exception as e:
                 self.logger.error(f"Request failed on attempt {attempt}: {e}")
+                await asyncio.sleep(self.delay)
+        return None
+
+    async def _get_segment_size(self, segment_url: str) -> Optional[int]:
+        for attempt in range(1, self.retries + 1):
+            try:
+                response = await asyncio.to_thread(
+                    requests.head,
+                    url=segment_url,
+                    headers=self.headers,
+                    timeout=self.timeout,
+                    verify=False,
+                    impersonate="chrome",
+                )
+                if response.status_code == 200:
+                    content_length = response.headers.get("Content-Length")
+                    if content_length:
+                        return int(content_length)
+            except Exception as e:
+                self.logger.error(
+                    f"Failed to get segment size on attempt {attempt}: {e}"
+                )
                 await asyncio.sleep(self.delay)
         return None
 
@@ -278,6 +302,29 @@ class VideoDownloader:
             return None
 
         segment_count = self._count_segments(segment_content.decode("utf-8"))
+        if segment_count == 0:
+            return None
+
+        # Estimate segment size using the first segment
+        try:
+            playlist = m3u8.loads(segment_content.decode("utf-8"))
+            if playlist.segments:
+                first_segment_uri = playlist.segments[0].uri
+                variant_dir = os.path.dirname(variant_url)
+                first_segment_url = (
+                    f"https://surrit.com/{uuid}/{variant_dir}/{first_segment_uri}"
+                )
+                segment_size = await self._get_segment_size(first_segment_url)
+                if segment_size:
+                    self.progress.set_bytes_per_segment(segment_size)
+                    self.logger.debug(f"Estimated bytes per segment: {segment_size}")
+                else:
+                    self.logger.warning(
+                        "Failed to get segment size, using default estimate"
+                    )
+        except Exception as e:
+            self.logger.error(f"Error estimating segment size: {e}")
+
         return variant_url, segment_count
 
     def _select_quality_variant(self, m3u8_content: str) -> Optional[str]:

@@ -88,7 +88,7 @@ async def quality_callback(client: Client, callback_query: CallbackQuery):
                 file_info = await get_video_info(file)
                 seg_duration = float(file_info["format"]["duration"])
                 thumb_path = await tools.generate_thumbnail(
-                    file, output_image=f"{path.name}-{process.date} + jpg"
+                    file, output_image=f"{path.name}-{process.date}.jpg"
                 )
                 formatted_duration = format_duration(seg_duration)
                 caption = (

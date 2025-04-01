@@ -151,7 +151,7 @@ class VideoDownloader:
                 return False, None
 
             title = self._extract_title(page_html) or "video"
-            file_name = self._get_clean_filename(title)
+            file_name = self._get_url_based_filename(title)
             self.progress.set_file_name(file_name)
 
             self.progress.update(0, "Processing playlist")
@@ -233,19 +233,6 @@ class VideoDownloader:
             return h1_match.group(1).strip()
 
         return None
-
-    def _get_clean_filename(self, title: str) -> str:
-        if self.custom_file_name:
-            return self.custom_file_name
-
-        clean_name = re.sub(r'[\\/*?:"<>|]', "_", title)
-        clean_name = re.sub(r"\s+", "_", clean_name)
-        clean_name = clean_name[:100]
-
-        if not clean_name or clean_name.isspace():
-            return self._get_url_based_filename()
-
-        return clean_name
 
     def _get_url_based_filename(self) -> str:
         try:

@@ -71,6 +71,7 @@ async def quality_callback(client: Client, callback_query: CallbackQuery):
         file_size = os.path.getsize(str(path))
 
         if file_size > MAX_SIZE:
+            await process.edit("<pre language=Status>Spliting</pre>")
             # If file exceeds MAX_SIZE, split it into parts
             output_prefix = str(path.parent / "split_")
             split_files = await split_video_by_size(str(path), output_prefix, MAX_SIZE)

@@ -7,7 +7,7 @@ from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMa
 from core import missav_dl
 from utils import progress_func, tools
 
-# Dictionary untuk menyimpan link berdasarkan message_id
+# Dictionary untuk menyimpan link berdasarkan message.id
 cache = {}
 
 
@@ -43,7 +43,7 @@ async def quality_callback(client: Client, callback_query: CallbackQuery):
     quality = callback_query.data.split("_")[1]
 
     # Mengambil link dari cache berdasarkan message_id
-    link = cache.get(callback_query.message.reply_to_message.message_id)
+    link = cache.get(callback_query.message.reply_to_message.id)
     if not link:
         return await callback_query.answer("Tautan tidak ditemukan!", show_alert=True)
 

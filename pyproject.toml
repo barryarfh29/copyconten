@@ -8,9 +8,12 @@ dependencies = [
     "aiohttp>=3.11.14",
     "aiopath>=0.7.7",
     "aiorun>=2025.1.1",
+    "curl-cffi>=0.10.0",
+    "m3u8>=6.0.0",
     "meval>=2.5",
     "pyrotgfork>=2.2.9",
     "python-dotenv>=1.1.0",
     "tgcrypto>=1.2.5",
+    "ua-generator>=2.0.4",
     "uvloop>=0.21.0",
 ]

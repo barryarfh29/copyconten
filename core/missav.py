@@ -462,7 +462,7 @@ def print_progress(progress_data: Dict[str, Any]):
         print()
 
 
-async def missav_dl(url: str, msg, file_name: str = None):
+async def missav_dl(url: str, msg, quality: str = "lowest"):
     """
     Download a video with progress updates sent to a Pyrogram message.
 
@@ -477,9 +477,8 @@ async def missav_dl(url: str, msg, file_name: str = None):
     downloader = VideoDownloader(
         url=url,
         output_dir="./downloads",
-        quality="medium",
+        quality=quality,
         msg=msg,
-        file_name=file_name,
         update_interval=3.0,
     )
 

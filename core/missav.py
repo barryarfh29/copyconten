@@ -317,11 +317,9 @@ class VideoDownloader:
             "-c",
             "copy",
             "-loglevel",
-            "error",
+            "info",
             output_file,
         ]
-
-        self.logger.info(f"Starting ffmpeg process: {' '.join(ffmpeg_cmd)}")
 
         try:
             process = await asyncio.create_subprocess_exec(

@@ -310,11 +310,45 @@ class VideoDownloader:
         return clean_name
 
     def _get_url_based_filename(self) -> str:
-        """Extract a filename from the URL as a fallback method."""
+        """Extract a more detailed filename from the URL structure."""
         try:
-            # Extract the last part of the URL path
-            base = self.url.rstrip("/").split("/")[-1]
-            # Remove query parameters and fragments
+            # Extract the last part of the URL path, which often contains the video ID
+            url_path = self.url.rstrip("/").split("/")
+
+            # Check if we have a URL structure like missav.ws/*/en/jufe-075-uncensored-leak
+            if len(url_path) >= 2:
+                last_segment = url_path[-1]
+
+                # Clean up the segment by removing query parameters and fragments
+                last_segment = last_segment.split("#")[0].split("?")[0]
+
+                # If the last segment has a good format (contains letters, numbers, hyphens)
+                if re.match(r"[a-zA-Z0-9]+-[0-9]+.*", last_segment):
+                    # This looks like a video ID with description (e.g., jufe-075-uncensored-leak)
+                    return last_segment
+
+                # Try the second-to-last segment if available
+                if len(url_path) >= 3:
+                    second_last = url_path[-2]
+                    if (
+                        not second_last.startswith("en") and len(second_last) > 2
+                    ):  # Skip 'en' language code
+                        return second_last
+
+            # Extract the domain-specific video ID if present
+            video_id_match = re.search(r"([a-zA-Z]+-\d+)", self.url)
+            if video_id_match:
+                video_id = video_id_match.group(1)
+
+                # Try to also get the description part
+                full_id_match = re.search(rf"{video_id}[-/](.+?)(?:/|$|\?|#)", self.url)
+                if full_id_match:
+                    description = full_id_match.group(1)
+                    return f"{video_id}-{description}"
+                return video_id
+
+            # Default to the original method's approach
+            base = url_path[-1]
             clean_base = base.split("#")[0].split("?")[0]
 
             # If we have something usable, return it

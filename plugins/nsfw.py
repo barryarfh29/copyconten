@@ -11,4 +11,5 @@ async def missav_cmd(client: Client, message):
     link = message.command[1]
 
     process = await message.reply("Processing...")
-    await missav_dl(link, quality="lowest", msg=process)
+    data = await missav_dl(link, quality="lowest", msg=process)
+    print(data)

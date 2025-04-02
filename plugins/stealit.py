@@ -21,9 +21,9 @@ async def stealer(
     Download and forward a message from target chat to current chat.
 
     Args:
-        message: The original command message
-        target_chat: Source chat ID or username
-        target_id: Source message ID
+        message: The original command message.
+        target_chat: Source chat ID or username.
+        target_id: Source message ID.
     """
     bot = delta.bot_client
     user = delta.user_client
@@ -73,7 +73,6 @@ async def stealer(
             )
         )
     except ValueError:
-
         return
 
     # Download thumbnail if available
@@ -205,8 +204,8 @@ async def steal_cmd(client: Client, message: types.Message) -> None:
     Command handler for /steal command.
 
     Args:
-        client: The pyrogram client
-        message: The command message
+        client: The Pyrogram client.
+        message: The command message.
     """
     # Check if URL is provided
     if len(message.command) < 2:
@@ -254,12 +253,57 @@ async def steal_cmd(client: Client, message: types.Message) -> None:
         await msg.edit("Invalid message ID in the URL.")
         return
 
+    # Retrieve the chat information to check for protected content
+    try:
+        target_chat_info = await delta.bot_client.get_chat(chat_id)
+    except Exception as e:
+        await msg.edit(f"Failed to get chat info: {e}")
+        return
+
     # Process each message in the range
     try:
         for m_id in range(msg_id, to_id + 1):
-            if chat_type == "public":
-                try:
-                    if msg_type == "single":
+            # If the target chat has protected content, always use the stealer method.
+            if target_chat_info.has_protected_content:
+                await stealer(msg, chat_id, m_id)
+            else:
+                if chat_type == "public":
+                    try:
+                        if msg_type == "single":
+                            await delta.bot_client.copy_message(
+                                msg.chat.id,
+                                chat_id,
+                                m_id,
+                                reply_parameters=types.ReplyParameters(
+                                    message_id=message.id
+                                ),
+                            )
+                        else:
+                            try:
+                                await delta.bot_client.copy_media_group(
+                                    msg.chat.id,
+                                    chat_id,
+                                    m_id,
+                                    reply_parameters=types.ReplyParameters(
+                                        message_id=message.id
+                                    ),
+                                )
+                            except Exception:
+                                await delta.user_client.copy_media_group(
+                                    msg.chat.id,
+                                    chat_id,
+                                    m_id,
+                                    reply_parameters=types.ReplyParameters(
+                                        message_id=message.id
+                                    ),
+                                )
+                    except Exception:
+                        await msg.edit(
+                            f"Using alternative method for message {m_id}..."
+                        )
+                        await stealer(msg, chat_id, m_id)
+                else:
+                    try:
                         await delta.bot_client.copy_message(
                             msg.chat.id,
                             chat_id,
@@ -268,40 +312,9 @@ async def steal_cmd(client: Client, message: types.Message) -> None:
                                 message_id=message.id
                             ),
                         )
-                    else:
-                        try:
-                            await delta.bot_client.copy_media_group(
-                                msg.chat.id,
-                                chat_id,
-                                m_id.id,
-                                reply_parameters=types.ReplyParameters(
-                                    message_id=message.id
-                                ),
-                            )
-                        except Exception:
-                            await delta.user_client.copy_media_group(
-                                msg.chat.id,
-                                chat_id,
-                                m_id.id,
-                                reply_parameters=types.ReplyParameters(
-                                    message_id=message.id
-                                ),
-                            )
-
-                except Exception as e:
-                    await msg.edit(f"Using alternative method...\n{str(e)}")
-                    await stealer(msg, chat_id, m_id)
-            else:
-                try:
-                    await delta.bot_client.copy_message(
-                        msg.chat.id,
-                        chat_id,
-                        m_id,
-                        reply_parameters=types.ReplyParameters(message_id=message.id),
-                    )
-                except Exception:
-                    await stealer(msg, chat_id, m_id)
-    except Exception:
+                    except Exception:
+                        await stealer(msg, chat_id, m_id)
+    except Exception as e:
         await msg.edit(f"Failed to process messages: {str(e)}")
         return
 

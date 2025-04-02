@@ -263,7 +263,7 @@ async def steal_cmd(client: Client, message: types.Message) -> None:
                         await delta.bot_client.copy_message(
                             msg.chat.id,
                             chat_id,
-                            target_msg.id,
+                            m_id,
                             reply_parameters=types.ReplyParameters(
                                 message_id=message.id
                             ),
@@ -273,7 +273,7 @@ async def steal_cmd(client: Client, message: types.Message) -> None:
                             await delta.bot_client.copy_media_group(
                                 msg.chat.id,
                                 chat_id,
-                                target_id.id,
+                                m_id.id,
                                 reply_parameters=types.ReplyParameters(
                                     message_id=message.id
                                 ),
@@ -282,7 +282,7 @@ async def steal_cmd(client: Client, message: types.Message) -> None:
                             await delta.user_client.copy_media_group(
                                 msg.chat.id,
                                 chat_id,
-                                target_id.id,
+                                m_id.id,
                                 reply_parameters=types.ReplyParameters(
                                     message_id=message.id
                                 ),

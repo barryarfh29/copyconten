@@ -576,6 +576,6 @@ async def missav_dl(url: str, msg, quality: str = "lowest"):
         output_dir="./downloads",
         quality=quality,
         msg=msg,
-        update_interval=1.0,
+        update_interval=5.0,
     )
     return await downloader.download()

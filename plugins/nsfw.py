@@ -135,7 +135,9 @@ async def quality_callback(client: Client, callback_query: CallbackQuery):
             # For files within MAX_SIZE, get the video's duration and generate a thumbnail
             video_info = await get_video_info(str(path))
             duration = float(video_info["format"]["duration"])
-            thumbnail_path = await tools.generate_thumbnail(str(path))
+            thumbnail_path = await tools.generate_thumbnail(
+                str(path), output_image=f"downloads/{path.name}-{process.date}.jpg"
+            )
             formatted_duration = format_duration(duration)
             caption = (
                 f"`{path.name}`\n"

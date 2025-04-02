@@ -129,6 +129,13 @@ class VideoDownloader:
         self.custom_file_name = file_name
         os.makedirs(self.output_dir, exist_ok=True)
 
+        # Add quality-specific size estimation multiplier
+        self.quality_multipliers = {
+            "lowest": 1.0,
+            "medium": 1.2,  # Add a 20% buffer for medium quality
+            "high": 1.5,  # Add a 50% buffer for high quality
+        }
+
     async def download(self) -> Tuple[bool, Optional[str]]:
         try:
             self.progress.update_bytes(0, "Fetching video page")
@@ -144,7 +151,7 @@ class VideoDownloader:
                 return False, None
 
             self._extract_title(page_html) or "video"
-            file_name = self._get_url_based_filename()
+            file_name = self.custom_file_name or self._get_url_based_filename()
             self.progress.set_file_name(file_name)
 
             self.progress.update_bytes(0, "Processing playlist")
@@ -154,7 +161,13 @@ class VideoDownloader:
                 return False, None
 
             variant_url, total_bytes = variant_data
-            self.progress.set_total_bytes(total_bytes)
+            # Apply quality-specific size adjustment
+            multiplier = self.quality_multipliers.get(self.quality.lower(), 1.0)
+            adjusted_total_bytes = int(total_bytes * multiplier)
+            self.logger.info(
+                f"Estimated size: {total_bytes} bytes, adjusted: {adjusted_total_bytes} bytes"
+            )
+            self.progress.set_total_bytes(adjusted_total_bytes)
 
             video_url = f"https://surrit.com/{uuid}/{variant_url}"
             output_file = os.path.join(self.output_dir, f"{file_name}.mp4")
@@ -163,6 +176,11 @@ class VideoDownloader:
             success = await self._execute_ffmpeg_download(video_url, output_file)
 
             if success:
+                # Update to actual file size after completion
+                if os.path.exists(output_file):
+                    actual_size = os.path.getsize(output_file)
+                    self.progress.set_total_bytes(actual_size)
+                    self.progress.completed_bytes = actual_size
                 self.progress.update_bytes(0, "Download completed")
             else:
                 self.progress.update_bytes(0, "Download failed")
@@ -302,8 +320,24 @@ class VideoDownloader:
                 total_bytes = sum(seg.byterange.length for seg in playlist.segments)
                 self.logger.info(f"Using byte range total: {total_bytes} bytes")
             else:
-                # Fallback to sampling first 3 segments
-                sample_segments = playlist.segments[:3]
+                # Improved segment sampling - use more samples for higher quality
+                sample_count = {"lowest": 3, "medium": 5, "high": 8}.get(
+                    self.quality.lower(), 3
+                )
+
+                # Get evenly distributed samples across the playlist
+                total_segments = len(playlist.segments)
+                if total_segments <= sample_count:
+                    sample_indices = list(range(total_segments))
+                else:
+                    step = total_segments / sample_count
+                    sample_indices = [
+                        min(int(i * step), total_segments - 1)
+                        for i in range(sample_count)
+                    ]
+
+                sample_segments = [playlist.segments[i] for i in sample_indices]
+
                 if not sample_segments:
                     return None
 
@@ -325,9 +359,18 @@ class VideoDownloader:
                         f"Estimated total size from {successful_samples} samples: {total_bytes} bytes"
                     )
                 else:
-                    # Final fallback: 1MB per segment
-                    total_bytes = len(playlist.segments) * 1048576
-                    self.logger.warning("Using fallback size estimation (1MB/segment)")
+                    # More intelligent fallback based on quality
+                    fallback_sizes = {
+                        "lowest": 524288,  # 512KB per segment
+                        "medium": 1048576,  # 1MB per segment
+                        "high": 2097152,  # 2MB per segment
+                    }
+                    segment_size = fallback_sizes.get(self.quality.lower(), 1048576)
+
+                    total_bytes = len(playlist.segments) * segment_size
+                    self.logger.warning(
+                        f"Using fallback size estimation ({segment_size/1048576}MB/segment)"
+                    )
 
             return variant_url, total_bytes
 
@@ -346,9 +389,24 @@ class VideoDownloader:
             if not variants:
                 return None
 
-            quality_map = {"lowest": 0, "medium": len(variants) // 2, "high": -1}
-            index = quality_map.get(self.quality.lower(), 0)
-            return variants[index].uri
+            # More intelligent quality selection based on quality name and available variants
+            quality_lower = self.quality.lower()
+
+            if quality_lower == "lowest":
+                return variants[0].uri
+            elif quality_lower == "high":
+                return variants[-1].uri
+            elif quality_lower == "medium":
+                # If we have 3 or more variants, select the middle one
+                # If we have only 2, select the higher one
+                if len(variants) >= 3:
+                    return variants[len(variants) // 2].uri
+                else:
+                    return variants[-1].uri
+            else:
+                # For any other value, just return the middle variant or first if only one exists
+                return variants[min(len(variants) // 2, len(variants) - 1)].uri
+
         except Exception as e:
             self.logger.error(f"Failed to process m3u8 content: {e}")
             return None
@@ -376,30 +434,122 @@ class VideoDownloader:
             )
 
             async def read_stderr():
-                size_pattern = re.compile(r"size=\s*(\d+)(k|m)?B", re.IGNORECASE)
+                # Improved regex patterns to handle more ffmpeg output formats
+                size_pattern = re.compile(
+                    r"size=\s*(\d+)(\.\d+)?(k|m|g)?B", re.IGNORECASE
+                )
                 byte_pattern = re.compile(r"bytes=\s*(\d+)", re.IGNORECASE)
+                time_pattern = re.compile(
+                    r"time=(\d+):(\d+):(\d+)\.(\d+)", re.IGNORECASE
+                )
+
+                previous_size = 0
+                last_log_time = time.time()
+
                 while True:
                     line = await process.stderr.readline()
                     if not line:
                         break
                     line_str = line.decode("utf-8", errors="replace")
 
-                    # Parse size in format like "size=   1234kB" or "size=  1.23MB"
+                    # Log raw output occasionally for debugging
+                    current_time = time.time()
+                    if current_time - last_log_time > 30:  # Log every 30 seconds
+                        self.logger.debug(f"ffmpeg output: {line_str.strip()}")
+                        last_log_time = current_time
+
+                    # Parse cumulative size reported
                     size_match = size_pattern.search(line_str)
                     if size_match:
-                        value, unit = size_match.groups()
-                        multiplier = 1
-                        if unit:
-                            multiplier = 1024 if unit.lower() == "k" else 1048576
-                        bytes_value = int(float(value) * multiplier)
-                        self.progress.update_bytes(bytes_value, "Downloading")
+                        try:
+                            value = size_match.group(1)
+                            decimal = size_match.group(2) or ""
+                            unit = size_match.group(3)
+
+                            # Parse as float to handle decimal values
+                            num_value = float(value + decimal)
+
+                            # Convert to bytes based on unit
+                            if unit:
+                                if unit.lower() == "k":
+                                    multiplier = 1024
+                                elif unit.lower() == "m":
+                                    multiplier = 1024 * 1024
+                                elif unit.lower() == "g":
+                                    multiplier = 1024 * 1024 * 1024
+                                else:
+                                    multiplier = 1
+                            else:
+                                multiplier = 1
+
+                            cumulative_size = int(num_value * multiplier)
+
+                            # Only update if the size has increased
+                            if cumulative_size > previous_size:
+                                delta = cumulative_size - previous_size
+                                if delta > 0:
+                                    self.progress.update_bytes(delta, "Downloading")
+                                    previous_size = cumulative_size
+                        except Exception as e:
+                            self.logger.error(f"Error parsing size: {e}")
                         continue
 
-                    # Parse raw byte count format
+                    # Parse byte count if reported
                     byte_match = byte_pattern.search(line_str)
                     if byte_match:
-                        bytes_value = int(byte_match.group(1))
-                        self.progress.update_bytes(bytes_value, "Downloading")
+                        try:
+                            cumulative_size = int(byte_match.group(1))
+                            delta = cumulative_size - previous_size
+                            if delta > 0:
+                                self.progress.update_bytes(delta, "Downloading")
+                                previous_size = cumulative_size
+                        except Exception as e:
+                            self.logger.error(f"Error parsing bytes: {e}")
+
+                    # Parse time progress as a fallback method for progress estimation
+                    time_match = time_pattern.search(line_str)
+                    if time_match and self.progress.total_bytes > 0:
+                        try:
+                            hours = int(time_match.group(1))
+                            minutes = int(time_match.group(2))
+                            seconds = int(time_match.group(3))
+                            milliseconds = int(time_match.group(4))
+
+                            total_seconds = (
+                                hours * 3600
+                                + minutes * 60
+                                + seconds
+                                + milliseconds / 100
+                            )
+
+                            # Use time progress as a rough estimate if we're not getting size updates
+                            # This assumes a linear relationship between time and download progress
+                            elapsed = time.time() - self.progress.start_time
+                            if (
+                                elapsed > 10 and total_seconds > 0
+                            ):  # Only use this after 10 seconds
+                                # Only update if we've made little progress through other methods
+                                if self.progress.completed_bytes < (
+                                    self.progress.total_bytes * 0.1
+                                ):
+                                    # This is a very rough estimation - adjust as needed
+                                    estimated_progress = (
+                                        min(0.95, total_seconds / 600)
+                                        * self.progress.total_bytes
+                                    )
+                                    if (
+                                        estimated_progress
+                                        > self.progress.completed_bytes
+                                    ):
+                                        delta = int(
+                                            estimated_progress
+                                            - self.progress.completed_bytes
+                                        )
+                                        self.progress.update_bytes(
+                                            delta, "Downloading (estimated)"
+                                        )
+                        except Exception as e:
+                            self.logger.error(f"Error parsing time: {e}")
 
             monitor_task = asyncio.create_task(read_stderr())
             await process.wait()

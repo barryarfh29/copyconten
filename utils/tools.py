@@ -54,7 +54,7 @@ async def generate_thumbnail(
         "-vframes",
         "1",
         "-q:v",
-        "8",
+        "10",
         output_image,
         "-y",
     ]
@@ -82,10 +82,6 @@ async def download_thumbnail(client: Client, msg: types.Message) -> str:
         logger.error(str(e))
         thumb = None
     return thumb
-
-
-from typing import Optional, Tuple
-from urllib.parse import parse_qs, urlparse
 
 
 def parse_telegram_url(url: str) -> Tuple[str, str, str, Optional[str], str]:

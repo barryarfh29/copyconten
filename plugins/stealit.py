@@ -255,9 +255,9 @@ async def steal_cmd(client: Client, message: types.Message) -> None:
 
     # Retrieve the chat information to check for protected content
     try:
-        target_chat_info = await delta.user_client.get_chat(chat_id)
+        target_chat_info = await delta.bot_client.get_chat(chat_id)
     except Exception:
-        pass
+        target_chat_info = False
 
     # Process each message in the range
     try:

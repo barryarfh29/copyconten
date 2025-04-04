@@ -105,8 +105,10 @@ class Settings:
 
 from dotenv import load_dotenv
 
-env_file = "config.env" if os.path.exists("config.env") else ".env"
-load_dotenv(env_file)
+# env_file = "config.env" if os.path.exists("config.env") else ".env"
+# load_dotenv(env_file)
+
+load_dotenv()
 
 # Initialize configuration
 config = Settings()

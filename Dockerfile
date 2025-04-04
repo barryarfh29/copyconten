@@ -2,11 +2,12 @@ FROM python:3.12-alpine
 
 WORKDIR /app
 
-# Install required system dependencies
-RUN apk add --no-cache \
+# Update apk and install required system dependencies
+RUN apk update && apk add --no-cache \
     python3-dev \
     gcc \
-    musl-dev
+    musl-dev \
+    ffmpeg
 
 # Copy and install requirements
 COPY requirements.txt .
